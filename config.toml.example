@@ -1,0 +1,21 @@
+[market]
+base_url = "https://market.near.ai"
+api_key = "sk_live_YOUR_KEY_HERE"
+agent_id = "your-agent-uuid"
+handle = "your_handle"
+
+[agent]
+skills = ["python", "typescript", "api-development", "code-review"]
+min_budget = 1.0
+max_bid = 10.0
+max_concurrent_jobs = 3
+poll_interval_seconds = 60
+bid_strategy = "competitive"
+
+[llm]
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+
+[logging]
+transcript_dir = "transcripts"
+level = "INFO"
