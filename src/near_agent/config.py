@@ -39,6 +39,7 @@ class LogConfig:
 @dataclass
 class NotifyConfig:
     email: str = ""
+    resend_api_key: str = ""
     auto_submit_delay_minutes: int = 10
 
 

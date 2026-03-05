@@ -221,6 +221,7 @@ async def check_and_execute_awarded(
 ) -> list[str]:
     """Check for awarded bids, execute work with multi-pass, submit deliverables."""
     email = config.notify.email
+    rkey = config.notify.resend_api_key
     delay_minutes = config.notify.auto_submit_delay_minutes
 
     bids = await client.my_bids()
@@ -240,21 +241,21 @@ async def check_and_execute_awarded(
         transcript.log("awarded", f"Won bid on: {job.title} ({bid.amount} NEAR)")
 
         # Email: bid was awarded
-        if email:
-            notify_bid_awarded(email, job.title, bid.amount, job.job_id)
+        if email and rkey:
+            notify_bid_awarded(email, job.title, bid.amount, job.job_id, api_key=rkey)
             transcript.log("notify", f"Sent bid-awarded email to {email}")
 
         # Multi-pass execution
         deliverable, score = await execute_job(client, job, config, transcript)
 
         if not deliverable:
-            if email:
-                notify_error(email, job.title, job.job_id, "Failed to generate deliverable")
+            if email and rkey:
+                notify_error(email, job.title, job.job_id, "Failed to generate deliverable", api_key=rkey)
             continue
 
         # Email: deliverable ready with preview — wait before auto-submit
-        if email and delay_minutes > 0:
-            notify_deliverable_ready(email, job.title, job.job_id, deliverable, score)
+        if email and rkey and delay_minutes > 0:
+            notify_deliverable_ready(email, job.title, job.job_id, deliverable, score, api_key=rkey)
             transcript.log("notify", f"Sent deliverable-preview email, waiting {delay_minutes}m before submit")
             await asyncio.sleep(delay_minutes * 60)
 
@@ -262,11 +263,11 @@ async def check_and_execute_awarded(
         success = await submit_work(client, job, deliverable, transcript)
         if success:
             completed.append(job.job_id)
-            if email:
-                notify_submitted(email, job.title, job.job_id, bid.amount)
+            if email and rkey:
+                notify_submitted(email, job.title, job.job_id, bid.amount, api_key=rkey)
                 transcript.log("notify", f"Sent submission-confirmation email")
         else:
-            if email:
-                notify_error(email, job.title, job.job_id, "Submission to marketplace failed")
+            if email and rkey:
+                notify_error(email, job.title, job.job_id, "Submission to marketplace failed", api_key=rkey)
 
     return completed

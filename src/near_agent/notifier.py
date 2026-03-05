@@ -1,31 +1,32 @@
-"""Email notifier — sends alerts on bid awards, work completion, and errors."""
+"""Email notifier — sends alerts via Resend on bid awards, work completion, and errors."""
 from __future__ import annotations
 
-import subprocess
-from email.mime.text import MIMEText
+import httpx
 
 
-def send_email(to: str, subject: str, body: str, from_addr: str = "near-agent@levitin-prod"):
-    """Send email via system sendmail."""
-    msg = MIMEText(body, "plain", "utf-8")
-    msg["From"] = from_addr
-    msg["To"] = to
-    msg["Subject"] = subject
+RESEND_API_URL = "https://api.resend.com/emails"
 
+
+def send_email(to: str, subject: str, body: str, api_key: str, from_addr: str = "NEAR Agent <onboarding@resend.dev>"):
+    """Send email via Resend API."""
     try:
-        proc = subprocess.run(
-            ["/usr/sbin/sendmail", "-t"],
-            input=msg.as_string(),
-            capture_output=True,
-            text=True,
+        resp = httpx.post(
+            RESEND_API_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "from": from_addr,
+                "to": [to],
+                "subject": subject,
+                "text": body,
+            },
             timeout=10,
         )
-        return proc.returncode == 0
+        return resp.status_code == 200
     except Exception:
         return False
 
 
-def notify_bid_awarded(to: str, job_title: str, amount: str, job_id: str):
+def notify_bid_awarded(to: str, job_title: str, amount: str, job_id: str, *, api_key: str):
     send_email(
         to=to,
         subject=f"[NEAR Agent] Bid Won: {job_title}",
@@ -37,10 +38,11 @@ def notify_bid_awarded(to: str, job_title: str, amount: str, job_id: str):
             f"The agent is now generating a deliverable using multi-pass execution.\n"
             f"You will receive another email with the deliverable preview before submission.\n"
         ),
+        api_key=api_key,
     )
 
 
-def notify_deliverable_ready(to: str, job_title: str, job_id: str, preview: str, quality_score: int):
+def notify_deliverable_ready(to: str, job_title: str, job_id: str, preview: str, quality_score: int, *, api_key: str):
     send_email(
         to=to,
         subject=f"[NEAR Agent] Deliverable Ready (Score: {quality_score}/100): {job_title}",
@@ -55,10 +57,11 @@ def notify_deliverable_ready(to: str, job_title: str, job_id: str, preview: str,
             f"The agent will auto-submit in 10 minutes unless you stop it:\n"
             f"  ssh root@46.224.186.172 systemctl stop near-agent\n"
         ),
+        api_key=api_key,
     )
 
 
-def notify_submitted(to: str, job_title: str, job_id: str, amount: str):
+def notify_submitted(to: str, job_title: str, job_id: str, amount: str, *, api_key: str):
     send_email(
         to=to,
         subject=f"[NEAR Agent] Work Submitted: {job_title}",
@@ -70,10 +73,11 @@ def notify_submitted(to: str, job_title: str, job_id: str, amount: str):
             f"Waiting for the job creator to review and accept.\n"
             f"If they request changes, the agent will handle it next cycle.\n"
         ),
+        api_key=api_key,
     )
 
 
-def notify_error(to: str, job_title: str, job_id: str, error: str):
+def notify_error(to: str, job_title: str, job_id: str, error: str, *, api_key: str):
     send_email(
         to=to,
         subject=f"[NEAR Agent] Error: {job_title}",
@@ -84,4 +88,5 @@ def notify_error(to: str, job_title: str, job_id: str, error: str):
             f"Error: {error}\n\n"
             f"You may need to intervene manually.\n"
         ),
+        api_key=api_key,
     )
