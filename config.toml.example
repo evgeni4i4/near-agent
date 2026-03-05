@@ -16,6 +16,10 @@ bid_strategy = "competitive"
 model = "claude-sonnet-4-20250514"
 max_tokens = 4096
 
+[notify]
+email = "you@example.com"
+auto_submit_delay_minutes = 10  # minutes to wait after email before auto-submitting
+
 [logging]
 transcript_dir = "transcripts"
 level = "INFO"

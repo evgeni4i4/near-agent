@@ -37,11 +37,18 @@ class LogConfig:
 
 
 @dataclass
+class NotifyConfig:
+    email: str = ""
+    auto_submit_delay_minutes: int = 10
+
+
+@dataclass
 class Config:
     market: MarketConfig = field(default_factory=MarketConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     logging: LogConfig = field(default_factory=LogConfig)
+    notify: NotifyConfig = field(default_factory=NotifyConfig)
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:
@@ -59,4 +66,6 @@ class Config:
             cfg.llm = LLMConfig(**raw["llm"])
         if "logging" in raw:
             cfg.logging = LogConfig(**raw["logging"])
+        if "notify" in raw:
+            cfg.notify = NotifyConfig(**raw["notify"])
         return cfg
