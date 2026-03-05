@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+from pathlib import Path
 
 import anthropic
 
@@ -219,10 +221,9 @@ async def check_and_execute_awarded(
     config: Config,
     transcript: Transcript,
 ) -> list[str]:
-    """Check for awarded bids, execute work with multi-pass, submit deliverables."""
+    """Check for awarded bids, execute work, save deliverables for manual approval."""
     email = config.notify.email
     rkey = config.notify.resend_api_key
-    delay_minutes = config.notify.auto_submit_delay_minutes
 
     bids = await client.my_bids()
     awarded = [b for b in bids if b.status == "accepted"]
@@ -237,6 +238,13 @@ async def check_and_execute_awarded(
             if assignment.get("status") in ("submitted", "accepted"):
                 transcript.log("status", f"Already submitted for: {job.title}")
                 continue
+
+        # Check if deliverable already generated and waiting for approval
+        pending_dir = Path(config.logging.transcript_dir) / "pending"
+        pending_file = pending_dir / f"{job.job_id}.json"
+        if pending_file.exists():
+            transcript.log("status", f"Deliverable pending approval: {job.title}")
+            continue
 
         transcript.log("awarded", f"Won bid on: {job.title} ({bid.amount} NEAR)")
 
@@ -253,21 +261,28 @@ async def check_and_execute_awarded(
                 notify_error(email, job.title, job.job_id, "Failed to generate deliverable", api_key=rkey)
             continue
 
-        # Email: deliverable ready with preview — wait before auto-submit
-        if email and rkey and delay_minutes > 0:
-            notify_deliverable_ready(email, job.title, job.job_id, deliverable, score, api_key=rkey)
-            transcript.log("notify", f"Sent deliverable-preview email, waiting {delay_minutes}m before submit")
-            await asyncio.sleep(delay_minutes * 60)
+        # Save deliverable to pending/ for manual approval — do NOT auto-submit
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        pending_file.write_text(json.dumps({
+            "job_id": job.job_id,
+            "job_title": job.title,
+            "bid_amount": bid.amount,
+            "quality_score": score,
+            "deliverable": deliverable,
+        }, indent=2))
 
-        # Submit
-        success = await submit_work(client, job, deliverable, transcript)
-        if success:
-            completed.append(job.job_id)
-            if email and rkey:
-                notify_submitted(email, job.title, job.job_id, bid.amount, api_key=rkey)
-                transcript.log("notify", f"Sent submission-confirmation email")
-        else:
-            if email and rkey:
-                notify_error(email, job.title, job.job_id, "Submission to marketplace failed", api_key=rkey)
+        deliverable_file = pending_dir / f"{job.job_id}.md"
+        deliverable_file.write_text(deliverable)
+
+        transcript.log("pending", f"Deliverable saved for approval: {pending_file}", {
+            "job_id": job.job_id,
+            "score": score,
+            "length": len(deliverable),
+        })
+
+        # Email: deliverable ready — requires manual approval to submit
+        if email and rkey:
+            notify_deliverable_ready(email, job.title, job.job_id, deliverable, score, api_key=rkey)
+            transcript.log("notify", f"Sent deliverable-preview email to {email}")
 
     return completed

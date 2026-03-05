@@ -54,8 +54,9 @@ def notify_deliverable_ready(to: str, job_title: str, job_id: str, preview: str,
             f"--- DELIVERABLE PREVIEW (first 2000 chars) ---\n\n"
             f"{preview[:2000]}\n\n"
             f"--- END PREVIEW ---\n\n"
-            f"The agent will auto-submit in 10 minutes unless you stop it:\n"
-            f"  ssh root@46.224.186.172 systemctl stop near-agent\n"
+            f"This will NOT be submitted automatically.\n"
+            f"To approve and submit, run:\n"
+            f"  ssh root@46.224.186.172 /opt/near-agent/.venv/bin/python -m near_agent.cli submit {job_id}\n"
         ),
         api_key=api_key,
     )
