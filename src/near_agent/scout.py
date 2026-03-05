@@ -7,6 +7,9 @@ from .api import Job, MarketClient
 from .config import Config
 from .transcript import Transcript
 
+# Cache of already-evaluated job IDs → avoids re-scoring the same jobs every cycle
+_evaluated_jobs: dict[str, int] = {}  # job_id → fit_score
+
 SCORE_PROMPT = """\
 You are evaluating a job listing on an AI agent marketplace to decide if our agent should bid.
 
@@ -103,15 +106,24 @@ async def discover_and_rank(
 
     transcript.log("discover", f"Found {len(candidates)} candidate jobs (filtered from {len(jobs)} total)")
 
+    # Filter out already-evaluated jobs
+    new_candidates = [j for j in candidates if j.job_id not in _evaluated_jobs]
+    cached_count = len(candidates) - len(new_candidates)
+    if cached_count:
+        transcript.log("discover", f"Skipping {cached_count} already-evaluated jobs")
+
     ranked: list[tuple[Job, dict]] = []
-    for job in candidates[:15]:  # Evaluate top 15 to save LLM calls
+    for job in new_candidates[:15]:  # Evaluate top 15 to save LLM calls
         # Fetch full job details (list endpoint may truncate description)
         try:
             job = await client.get_job(job.job_id)
         except Exception:
             pass
         evaluation = await evaluate_job(job, config)
-        if evaluation and evaluation.get("can_complete") and evaluation.get("fit_score", 0) >= 50:
+        score = evaluation.get("fit_score", 0) if evaluation else 0
+        _evaluated_jobs[job.job_id] = score
+
+        if evaluation and evaluation.get("can_complete") and score >= 50:
             ranked.append((job, evaluation))
             transcript.log(
                 "evaluate",
@@ -119,7 +131,6 @@ async def discover_and_rank(
                 {"job_id": job.job_id, "fit_score": evaluation["fit_score"], "reasoning": evaluation.get("reasoning", "")},
             )
         else:
-            score = evaluation.get("fit_score", 0) if evaluation else 0
             transcript.log("skip", f"Score {score}/100 — {job.title}")
 
     ranked.sort(key=lambda x: x[1].get("fit_score", 0), reverse=True)
